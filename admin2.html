@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Platform Kids Admin</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: #1a1a1a; color: #fff; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .box { background: #262626; padding: 30px; border-radius: 12px; width: 100%; max-width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); position: relative; }
+        h2 { margin-bottom: 20px; color: #00adb5; text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; color: #ccc; }
+        input, button { width: 100%; padding: 12px; border-radius: 8px; border: none; outline: none; font-size: 16px; }
+        input { background: #333; color: #fff; border: 1px solid #444; }
+        button { background: #00adb5; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #008c9e; }
+        .status { margin-top: 15px; font-size: 14px; text-align: center; color: #888; }
+        
+        /* ലോഗിൻ, മെയിൻ പാനൽ കൺട്രോൾ */
+        #login-panel, #admin-panel { display: none; }
+        .logout-btn { background: #ff2e63; padding: 6px 12px; font-size: 12px; width: auto; position: absolute; top: 15px; right: 15px; margin: 0; }
+        .logout-btn:hover { background: #e02454; }
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <div id="login-panel">
+            <h2>Admin Login</h2>
+            <div class="form-group">
+                <label>GitHub Personal Access Token നൽകുക:</label>
+                <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
+            </div>
+            <button onclick="saveTokenAndLogin()">Verify & Save Token</button>
+        </div>
+
+        <div id="admin-panel">
+            <button class="logout-btn" onclick="logout()">Logout</button>
+            <h2>Kids Portal Admin 🛠️</h2>
+            <div class="form-group">
+                <label>YouTube അല്ലെങ്കിൽ Instagram ലിങ്ക് നൽകുക:</label>
+                <input type="text" id="video-url" placeholder="YouTube വീഡിയോ/Shorts അല്ലെങ്കിൽ Insta Reel...">
+            </div>
+            <button onclick="addAndSync()">Add & Update Portal</button>
+            <div id="status-msg" class="status">Ready...</div>
+        </div>
+    </div>
+
+    <script>
+        // ഇവിടെ നിങ്ങളുടെ കൃത്യമായ ഗിറ്റ്‌安排് വിവരങ്ങൾ നൽകുക
+        const OWNER = "YOUR_GITHUB_USERNAME"; 
+        const REPO = "YOUR_REPO_NAME";
+        const PATH = "videos.json";
+
+        // പേജ് ലോഡ് ചെയ്യുമ്പോൾ ടോക്കൺ ഉണ്ടോ എന്ന് നോക്കുന്നു
+        window.onload = function() {
+            if (localStorage.getItem('saved_gh_token')) {
+                document.getElementById('admin-panel').style.display = 'block';
+            } else {
+                document.getElementById('login-panel').style.display = 'block';
+            }
+        };
+
+        function saveTokenAndLogin() {
+            let tokenInput = document.getElementById('gh-token').value.trim();
+            if (!tokenInput) { alert('ദയവായി ടോക്കൺ നൽകുക!'); return; }
+            localStorage.setItem('saved_gh_token', tokenInput);
+            document.getElementById('login-panel').style.display = 'none';
+            document.getElementById('admin-panel').style.display = 'block';
+        }
+
+        function logout() {
+            if (confirm('ടോക്കൺ ഡിലീറ്റ് ചെയ്ത് പുറത്തു കടക്കണോ?')) {
+                localStorage.removeItem('saved_gh_token');
+                document.getElementById('gh-token').value = '';
+                document.getElementById('admin-panel').style.display = 'none';
+                document.getElementById('login-panel').style.display = 'block';
+            }
+        }
+
+        function processUrl(url) {
+            let trimmedUrl = url.trim();
+            try {
+                let urlObj = new URL(trimmedUrl);
+                
+                // 1. യൂട്യൂബ്
+                if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be')) {
+                    let videoId = "";
+                    if (urlObj.pathname.startsWith('/shorts/')) {
+                        videoId = urlObj.pathname.split('/')[2];
+                    } else if (urlObj.hostname.includes('youtu.be')) {
+                        videoId = urlObj.pathname.split('/')[1];
+                    } else {
+                        videoId = urlObj.searchParams.get('v');
+                    }
+                    if (videoId) {
+                        return { type: 'youtube', url: `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1` };
+                    }
+                }
+                
+                // 2. ഇൻസ്റ്റാഗ്രാം
+                if (urlObj.hostname.includes('instagram.com')) {
+                    let parts = urlObj.pathname.split('/').filter(p => p);
+                    if (parts.length >= 2 && (parts[0] === 'p' || parts[0] === 'reel' || parts[0] === 'reels')) {
+                        return { type: 'instagram', url: `https://www.instagram.com/p/${parts[1]}/embed/` };
+                    }
+                }
+                return null;
+            } catch (e) { return null; }
+        }
+
+        async function addAndSync() {
+            let token = localStorage.getItem('saved_gh_token');
+            let urlInput = document.getElementById('video-url').value.trim();
+            let status = document.getElementById('status-msg');
+
+            let videoObject = processUrl(urlInput);
+            if (!videoObject) { alert('ശരിയായ YouTube അല്ലെങ്കിൽ Instagram ലിങ്ക് നൽകുക!'); return; }
+
+            status.innerText = "കണക്ട് ചെയ്യുന്നു...";
+
+            try {
+                let fileSha = "";
+                let currentVideos = [];
+                
+                let res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`);
+                if (res.ok) {
+                    let fileData = await res.json();
+                    fileSha = fileData.sha;
+                    currentVideos = JSON.parse(atob(fileData.content));
+                }
+
+                let isExist = currentVideos.some(v => v.url === videoObject.url);
+                if (isExist) {
+                    alert('ഈ വീഡിയോ നിലവിൽ ലിസ്റ്റിലുണ്ട്!');
+                    status.innerText = "Ready...";
+                    return;
+                }
+
+                currentVideos.push(videoObject);
+                status.innerText = "അപ്‌ലോഡ് ചെയ്യുന്നു...";
+
+                let updateRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: "Added new multi-platform video",
+                        content: btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(currentVideos)))),
+                        sha: fileSha ? fileSha : undefined
+                    })
+                });
+
+                if (updateRes.ok) {
+                    status.innerText = "വിജയകരമായി ചേർത്തു! ✅";
+                    document.getElementById('video-url').value = "";
+                } else {
+                    status.innerText = "അപ്ഡേറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല! ടോക്കൺ ചെക്ക് ചെയ്യുക.";
+                }
+            } catch (e) { status.innerText = "Error ഒക്കർ ചെയ്തു!"; }
+        }
+    </script>
+</body>
+</html>
