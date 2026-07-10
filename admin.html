@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Repo Admin (Auto-Save Token)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: #1a1a1a; color: #fff; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .box { background: #262626; padding: 30px; border-radius: 12px; width: 100%; max-width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); position: relative; }
+        h2 { margin-bottom: 20px; color: #00adb5; text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; color: #ccc; }
+        input, button { width: 100%; padding: 12px; border-radius: 8px; border: none; outline: none; font-size: 16px; }
+        input { background: #333; color: #fff; border: 1px solid #444; }
+        button { background: #00adb5; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #008c9e; }
+        .status { margin-top: 15px; font-size: 14px; text-align: center; color: #888; }
+        
+        /* പാനലുകൾ ഹൈഡ് ചെയ്യാൻ */
+        #login-panel, #admin-panel { display: none; }
+        
+        /* Logout ബട്ടൺ */
+        .logout-btn { background: #ff2e63; padding: 6px 12px; font-size: 12px; width: auto; position: absolute; top: 15px; right: 15px; margin: 0; }
+        .logout-btn:hover { background: #e02454; }
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <div id="login-panel">
+            <h2>Admin Authentication</h2>
+            <div class="form-group">
+                <label>GitHub Personal Access Token നൽകുക:</label>
+                <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
+            </div>
+            <button onclick="saveTokenAndLogin()">Verify & Save</button>
+        </div>
+
+        <div id="admin-panel">
+            <button class="logout-btn" onclick="logout()">Logout / Clear Token</button>
+            <h2>അഡ്മിൻ പാനൽ 🛠️</h2>
+            <div class="form-group">
+                <label>ഇൻസ്റ്റാഗ്രാം ലിങ്ക് പേസ്റ്റ് ചെയ്യുക:</label>
+                <input type="text" id="video-url" placeholder="https://www.instagram.com/p/...">
+            </div>
+            <button onclick="addAndSync()">Add & Update Repo</button>
+            <div id="status-msg" class="status">Ready...</div>
+        </div>
+    </div>
+
+    <script>
+        // കറക്റ്റ് ആയി കോൺഫിഗർ ചെയ്യുക
+        const OWNER = "YOUR_GITHUB_USERNAME"; 
+        const REPO = "YOUR_REPO_NAME";
+        const PATH = "videos.json";
+
+        // പേജ് ലോഡ് ചെയ്യുമ്പോൾ തന്നെ ടോക്കൺ ഉണ്ടോ എന്ന് നോക്കുന്നു
+        window.onload = function() {
+            let savedToken = localStorage.getItem('saved_gh_token');
+            if (savedToken) {
+                // ടോക്കൺ ഉണ്ടെങ്കിൽ നേരിട്ട് അഡ്മിൻ പാനൽ കാണിക്കും
+                document.getElementById('admin-panel').style.display = 'block';
+            } else {
+                // ടോക്കൺ ഇല്ലെങ്കിൽ ലോഗിൻ ബോക്സ് കാണിക്കും
+                document.getElementById('login-panel').style.display = 'block';
+            }
+        };
+
+        // ടോക്കൺ ബ്രൗസറിൽ സേവ് ചെയ്ത് ലോഗിൻ ചെയ്യാൻ
+        function saveTokenAndLogin() {
+            let tokenInput = document.getElementById('gh-token').value.trim();
+            if (!tokenInput) {
+                alert('ദയവായി ടോക്കൺ നൽകുക!');
+                return;
+            }
+            // ബ്രൗസറിലേക്ക് ടോക്കൺ സേവ് ചെയ്യുന്നു
+            localStorage.setItem('saved_gh_token', tokenInput);
+            
+            // പാനലുകൾ മാറ്റുന്നു
+            document.getElementById('login-panel').style.display = 'none';
+            document.getElementById('admin-panel').style.display = 'block';
+        }
+
+        // ടോക്കൺ ബ്രൗസറിൽ നിന്ന് ഒഴിവാക്കാൻ (Logout)
+        function logout() {
+            if (confirm('ടോക്കൺ ഡിലീറ്റ് ചെയ്ത് പുറത്തു കടക്കണോ?')) {
+                localStorage.removeItem('saved_gh_token');
+                document.getElementById('gh-token').value = '';
+                document.getElementById('admin-panel').style.display = 'none';
+                document.getElementById('login-panel').style.display = 'block';
+            }
+        }
+
+        function cleanInstagramUrl(url) {
+            try {
+                let urlObj = new URL(url.trim());
+                let path = urlObj.pathname;
+                let parts = path.split('/').filter(p => p);
+                if (parts.length >= 2 && (parts[0] === 'p' || parts[0] === 'reel' || parts[0] === 'reels')) {
+                    return `https://www.instagram.com/p/${parts[1]}/embed/`;
+                }
+                return null;
+            } catch (e) { return null; }
+        }
+
+        async function addAndSync() {
+            // ബ്രൗസറിൽ നിന്ന് സേവ് ചെയ്ത ടോക്കൺ തനിയെ എടുക്കുന്നു
+            let token = localStorage.getItem('saved_gh_token');
+            let urlInput = document.getElementById('video-url').value.trim();
+            let status = document.getElementById('status-msg');
+
+            let cleanUrl = cleanInstagramUrl(urlInput);
+            if (!cleanUrl) { alert('ശരിയായ ഇൻസ്റ്റാഗ്രാം ലിങ്ക് നൽകുക!'); return; }
+
+            status.innerText = "കണക്ട് ചെയ്യുന്നു...";
+
+            try {
+                let fileSha = "";
+                let currentVideos = [];
+                
+                let res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`);
+                if (res.ok) {
+                    let fileData = await res.json();
+                    fileSha = fileData.sha;
+                    currentVideos = JSON.parse(atob(fileData.content));
+                }
+
+                if (currentVideos.includes(cleanUrl)) {
+                    alert('ഈ വീഡിയോ നിലവിൽ ലിസ്റ്റിലുണ്ട്!');
+                    status.innerText = "Ready...";
+                    return;
+                }
+
+                currentVideos.push(cleanUrl);
+                status.innerText = "ഗിറ്റ്‌环境中ിലേക്ക് അപ്‌ലോഡ് ചെയ്യുന്നു...";
+
+                let updateRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: "Update study videos list via admin panel",
+                        content: btoa(unescape(encodeURIComponent(JSON.stringify(currentVideos)))), // മലയാളം ക്യാരക്ടർ പ്രശ്നം വരാതിരിക്കാൻ
+                        sha: fileSha ? fileSha : undefined
+                    })
+                });
+
+                if (updateRes.ok) {
+                    status.innerText = "ലിസ്റ്റ് വിജയകരമായി അപ്ഡേറ്റ് ചെയ്തു! ✅";
+                    document.getElementById('video-url').value = "";
+                } else {
+                    status.innerText = "അപ്ഡേറ്റ് ചെയ്യാൻ കഴിഞ്ഞില്ല! ടോക്കൺ തെറ്റായിരിക്കാം, Logout ചെയ്ത് വീണ്ടും ട്രൈ ചെയ്യുക.";
+                }
+
+            } catch (e) {
+                status.innerText = "Error ഒക്കർ ചെയ്തു!";
+            }
+        }
+    </script>
+</body>
+</html>
