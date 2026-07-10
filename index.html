@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Mode</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background-color: #000; color: #fff; overflow: hidden; }
+        #student-panel { height: 100vh; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; }
+        #student-panel::-webkit-scrollbar { display: none; }
+        .reel-container { width: 100%; height: 100vh; scroll-snap-align: start; display: flex; justify-content: center; align-items: center; background: #000; }
+        .reel-iframe { width: 100%; max-width: 450px; height: 95vh; border: none; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.8); }
+        .loading { text-align: center; padding: 20px; color: #888; font-size: 18px; width: 100%; margin-top: 45vh;}
+    </style>
+</head>
+<body>
+
+    <div id="student-panel">
+        <div id="reels-wrapper">
+            <div class="loading">വീഡിയോകൾ ലോഡ് ചെയ്യുന്നു...</div>
+        </div>
+    </div>
+
+    <script>
+        function shuffleArray(array) {
+            let shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                let j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        async function loadReels() {
+            let wrapper = document.getElementById('reels-wrapper');
+            try {
+                // ഒരേ ഫോൾഡറിലുള്ള videos.json ഫയലിൽ നിന്ന് ലിങ്കുകൾ എടുക്കുന്നു
+                let res = await fetch('videos.json');
+                if(!res.ok) throw new Error();
+                let videoUrls = await res.json();
+                
+                if (videoUrls.length === 0) {
+                    wrapper.innerHTML = '<div class="reel-container"><p style="color:#888;">വീഡിയോകൾ ഒന്നും ലഭ്യമല്ല!</p></div>';
+                    return;
+                }
+
+                wrapper.innerHTML = '';
+                let randomVideos = shuffleArray(videoUrls);
+
+                randomVideos.forEach(url => {
+                    wrapper.innerHTML += `
+                        <div class="reel-container">
+                            <iframe class="reel-iframe" src="${url}" scrolling="no" allowtransparency="true"></iframe>
+                        </div>
+                    `;
+                });
+            } catch (e) {
+                wrapper.innerHTML = '<div class="reel-container"><p style="color:#888;">ഡാറ്റ കണ്ടെത്താൻ കഴിഞ്ഞില്ല. അഡ്മിൻ പാനൽ വഴി ആദ്യം വീഡിയോകൾ ആഡ് ചെയ്യുക.</p></div>';
+            }
+        }
+
+        loadReels();
+    </script>
+</body>
+</html>
